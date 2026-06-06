@@ -5,78 +5,208 @@ import java.util.ArrayList;
 
 public class DrawPanel extends JPanel {
 
-    int startX, startY, endX, endY;
+    private int startX, startY, endX, endY;
 
-    // Free Drawing용 이전 좌표
-    int prevX, prevY;
+    private int prevX, prevY;
 
-    // 현재 선택된 도형
-    String currentShape = "FREE";
+    private String currentTool = "FREE";
 
-    //도형 저장 리스트
-    ArrayList<MyShape> shapes = new ArrayList<>();
+    private Color currentColor = Color.BLACK;
 
-    public DrawPanel() {
+    private int currentStroke = 3;
 
-        //클릭 이벤트 처리
-        MouseAdapter mouseAdapter = new MouseAdapter() {
+    private JLabel statusLabel;
 
-            @Override
-            public void mousePressed(MouseEvent e) {
+    private ArrayList<DrawAction> actions =
+            new ArrayList<>();
 
-                startX = e.getX();
-                startY = e.getY();
+    private DrawAction currentAction;
 
-                prevX = startX;
-                prevY = startY;
-            }
+    public DrawPanel(JLabel statusLabel) {
 
-            @Override
-            public void mouseReleased(MouseEvent e) {
+        this.statusLabel = statusLabel;
 
-                //FREE 모드가 아닐 떄만 저장
-                if(!currentShape.equals("FREE")) {
-                    shapes.add(
-                        new MyShape(startX, startY, endX, endY, currentShape)
-                    );
-                }
+        setBackground(Color.WHITE);
 
-                repaint();
-            }
-        };
+        MouseAdapter mouseAdapter =
+                new MouseAdapter() {
 
-        //드래그 이벤트 처리
-        MouseMotionAdapter motionAdapter = new MouseMotionAdapter() {
+                    @Override
+                    public void mousePressed(MouseEvent e) {
 
-            @Override
-            public void mouseDragged(MouseEvent e) {
+                        startX = e.getX();
+                        startY = e.getY();
 
-                endX = e.getX();
-                endY = e.getY();
+                        prevX = startX;
+                        prevY = startY;
 
-                //자유 그리기 모드
-                if(currentShape.equals("FREE")) {
-                    shapes.add(
-                        new MyShape(prevX, prevY, endX, endY, "LINE")
-                    );
+                        currentAction =
+                                new DrawAction();
+                    }
 
-                    prevX = endX;
-                    prevY = endY;
-                }
+                    @Override
+                    public void mouseReleased(MouseEvent e) {
 
-                repaint();
-            }
-        };
+                        if (
+                                !currentTool.equals("FREE")
+                                        &&
+                                        !currentTool.equals("ERASER")
+                        ) {
+
+                            currentAction.addShape(
+                                    new MyShape(
+                                            startX,
+                                            startY,
+                                            endX,
+                                            endY,
+                                            currentTool,
+                                            currentColor,
+                                            currentStroke
+                                    )
+                            );
+                        }
+
+                        if (!currentAction.getShapes().isEmpty()) {
+
+                            actions.add(currentAction);
+                        }
+
+                        currentAction = null;
+
+                        repaint();
+                    }
+                };
+
+        MouseMotionAdapter motionAdapter =
+                new MouseMotionAdapter() {
+
+                    @Override
+                    public void mouseDragged(MouseEvent e) {
+
+                        endX = e.getX();
+                        endY = e.getY();
+
+                        if (
+                                currentTool.equals("FREE")
+                        ) {
+
+                            currentAction.addShape(
+                                    new MyShape(
+                                            prevX,
+                                            prevY,
+                                            endX,
+                                            endY,
+                                            "LINE",
+                                            currentColor,
+                                            currentStroke
+                                    )
+                            );
+
+                            prevX = endX;
+                            prevY = endY;
+                        }
+
+                        else if (
+                                currentTool.equals("ERASER")
+                        ) {
+
+                            currentAction.addShape(
+                                    new MyShape(
+                                            prevX,
+                                            prevY,
+                                            endX,
+                                            endY,
+                                            "LINE",
+                                            Color.WHITE,
+                                            currentStroke + 10
+                                    )
+                            );
+
+                            prevX = endX;
+                            prevY = endY;
+                        }
+
+                        repaint();
+                    }
+                };
 
         addMouseListener(mouseAdapter);
-
         addMouseMotionListener(motionAdapter);
     }
 
-    //도형 선택
-    public void setShape(String shape) {
+    public void setTool(String tool) {
 
-        currentShape = shape;
+        currentTool = tool;
+
+        updateStatus();
+    }
+
+    public void setColor(Color color) {
+
+        currentColor = color;
+
+        updateStatus();
+    }
+
+    public void setStrokeSize(int size) {
+
+        currentStroke = size;
+
+        updateStatus();
+    }
+
+    public void undo() {
+
+        if (!actions.isEmpty()) {
+
+            actions.remove(
+                    actions.size() - 1
+            );
+
+            repaint();
+        }
+    }
+
+    public void clearAll() {
+
+        actions.clear();
+
+        repaint();
+    }
+
+    private void updateStatus() {
+
+        String toolName = "";
+
+        switch (currentTool) {
+
+            case "FREE":
+                toolName = "자유그리기";
+                break;
+
+            case "LINE":
+                toolName = "선";
+                break;
+
+            case "RECT":
+                toolName = "사각형";
+                break;
+
+            case "OVAL":
+                toolName = "원";
+                break;
+
+            case "ERASER":
+                toolName = "지우개";
+                break;
+        }
+
+        statusLabel.setText(
+                "도구 : "
+                        + toolName
+                        + " | 굵기 : "
+                        + currentStroke
+        );
     }
 
     @Override
@@ -84,46 +214,116 @@ public class DrawPanel extends JPanel {
 
         super.paintComponent(g);
 
-        //저장된 도형 출력
-        for (MyShape s : shapes) {
+        for (DrawAction action : actions) {
 
-            drawShape(g, s);
+            for (MyShape shape : action.getShapes()) {
+
+                drawShape(g, shape);
+            }
         }
 
-        //FREE 모드는 미리보기 제외
-        if(!currentShape.equals("FREE")) {
+        if (currentAction != null) {
+
+            for (MyShape shape : currentAction.getShapes()) {
+
+                drawShape(g, shape);
+            }
+        }
+
+        if (
+                !currentTool.equals("FREE")
+                        &&
+                        !currentTool.equals("ERASER")
+        ) {
+
             drawShape(
-                g,
-                new MyShape(startX, startY, endX, endY, currentShape)
+                    g,
+                    new MyShape(
+                            startX,
+                            startY,
+                            endX,
+                            endY,
+                            currentTool,
+                            currentColor,
+                            currentStroke
+                    )
             );
         }
-        
     }
 
-    //도형 그리기
-    private void drawShape(Graphics g, MyShape s) {
+    private void drawShape(
+            Graphics g,
+            MyShape shape
+    ) {
 
-        int x = Math.min(s.x1, s.x2);
-        int y = Math.min(s.y1, s.y2);
+        Graphics2D g2 =
+                (Graphics2D) g;
 
-        int width = Math.abs(s.x1 - s.x2);
-        int height = Math.abs(s.y1 - s.y2);
+        g2.setColor(shape.color);
 
-        switch (s.type) {
+        g2.setStroke(
+                new BasicStroke(
+                        shape.strokeSize
+                )
+        );
+
+        int x =
+                Math.min(
+                        shape.x1,
+                        shape.x2
+                );
+
+        int y =
+                Math.min(
+                        shape.y1,
+                        shape.y2
+                );
+
+        int width =
+                Math.abs(
+                        shape.x1
+                                - shape.x2
+                );
+
+        int height =
+                Math.abs(
+                        shape.y1
+                                - shape.y2
+                );
+
+        switch (shape.type) {
 
             case "LINE":
 
-                g.drawLine(s.x1, s.y1, s.x2, s.y2);
+                g2.drawLine(
+                        shape.x1,
+                        shape.y1,
+                        shape.x2,
+                        shape.y2
+                );
+
                 break;
 
             case "RECT":
 
-                g.drawRect(x, y, width, height);
+                g2.drawRect(
+                        x,
+                        y,
+                        width,
+                        height
+                );
+
                 break;
 
             case "OVAL":
 
-                g.drawOval(x, y, width, height);
+                g2.drawOval(
+                        x,
+                        y,
+                        width,
+                        height
+                );
+
                 break;
         }
     }
